@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SMS Gateway — AT Command</title>
+<title>Orange Pi ML307A Minicom - SMS Gateway</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;600&display=swap');
@@ -41,7 +41,7 @@ header { display:flex; align-items:center; gap:14px; padding:10px 20px; backgrou
 .btn-sm:hover { border-color:var(--accent); color:var(--accent); }
 
 /* Layout */
-.main { display:grid; grid-template-columns:320px 1fr 300px; flex:1; overflow:hidden; }
+.main { display:grid; grid-template-columns:320px 1fr 300px; flex:1; min-height:0; overflow:hidden; }
 
 /* Sidebar */
 .panel { background:var(--bg2); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
@@ -141,13 +141,20 @@ textarea { min-height:100px; }
 .btn-cancel { background:var(--bg3); border:1px solid var(--border); color:var(--muted); padding:8px 18px; border-radius:6px; font-family:var(--mono); font-size:12px; cursor:pointer; }
 .btn-confirm { background:var(--red); border:none; color:#fff; padding:8px 18px; border-radius:6px; font-family:var(--mono); font-size:12px; cursor:pointer; font-weight:700; }
 
+/* Footer */
+footer { background:var(--bg2); border-top:1px solid var(--border); padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:6px; flex-shrink:0; }
+footer, footer a { font-family:var(--mono); font-size:10px; color:var(--muted); text-decoration:none; letter-spacing:.5px; }
+footer a:hover { color:var(--accent); }
+.footer-sep { color:var(--border); }
+.footer-heart { color:#ff3b5c; }
+
 body::after { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,160,.008) 2px,rgba(0,229,160,.008) 4px); pointer-events:none; z-index:9999; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">SMS<span>.</span>GATEWAY <span>// AT-CMD</span></div>
+  <div class="logo">Orange Pi <span>ML307A</span> Minicom <span>//</span> SMS Gateway</div>
   <div class="status-pill">
     <div class="dot" id="dot"></div>
     <span class="status-text" id="status-text">Đang kiểm tra modem...</span>
@@ -192,6 +199,7 @@ body::after { content:''; position:fixed; inset:0; background:repeating-linear-g
     <div class="feed-header">
       <span class="feed-title">✦ Luồng tin nhắn</span>
       <span class="badge" id="msg-count">0</span>
+      <button class="btn-xs" style="margin-left:auto" onclick="confirmClearFeed()">✕ Xóa feed</button>
     </div>
     <div class="messages" id="messages">
       <div class="empty-state">Chưa có tin nhắn nào.<br>Kết nối modem để bắt đầu.</div>
@@ -241,6 +249,19 @@ let selectedIds  = new Set();
 // ── Socket ──────────────────────────────────────────────────
 socket.on('history', msgs => { allMessages = msgs; renderMessages(); });
 socket.on('new_sms', msg  => { allMessages.push(msg); renderMessages(); showNotify(msg); });
+
+// Server báo: xóa toàn bộ SIM → xóa feed tin đến
+socket.on('feed_cleared', () => {
+  allMessages = allMessages.filter(m => m.direction === 'out');
+  renderMessages();
+  toast('✓ Feed đã được làm sạch', true);
+});
+
+// Server báo: xóa 1 tin khỏi feed
+socket.on('remove_msg', data => {
+  allMessages = allMessages.filter(m => m.id !== data.id);
+  renderMessages();
+});
 
 // ── Status ──────────────────────────────────────────────────
 async function checkStatus() {
@@ -440,12 +461,34 @@ async function doDeleteAll() {
   try {
     const d = await apiFetch('/api/delete-all', 'DELETE');
     if (d.ok) {
-      toast('✓ Đã xóa toàn bộ SMS trên SIM', true);
+      // Feed sẽ tự xóa qua socket event 'feed_cleared'
+      toast('✓ Đã xóa toàn bộ SMS trên SIM + làm sạch feed', true);
       inboxItems = []; selectedIds.clear(); renderInbox();
     } else {
       toast('✖ ' + (d.detail || 'Xóa thất bại'), false);
     }
   } catch(e) { toast('Lỗi: ' + e.message, false); }
+}
+
+function confirmClearFeed() {
+  const incoming = allMessages.filter(m => m.direction !== 'out').length;
+  if (!incoming && allMessages.length === 0) { toast('Feed đã trống rồi', false); return; }
+  showModal(
+    'Xóa luồng tin nhắn',
+    'Xóa tất cả tin nhắn khỏi màn hình? Tin nhắn trên SIM sẽ không bị ảnh hưởng.',
+    () => doDeleteAll_feedOnly()
+  );
+}
+
+async function doDeleteAll_feedOnly() {
+  try {
+    await apiFetch('/api/clear-feed', 'DELETE');
+    // feed_cleared socket event sẽ tự xử lý
+  } catch(e) {
+    // Fallback: xóa local
+    allMessages = allMessages.filter(m => m.direction === 'out');
+    renderMessages();
+  }
 }
 
 // ── Modal ────────────────────────────────────────────────────
@@ -494,5 +537,14 @@ checkStatus();
 if (Notification.permission === 'default') Notification.requestPermission();
 setInterval(checkStatus, 30000);
 </script>
+<footer>
+  <span>Được tạo ra with <span class="footer-heart">❤</span> bởi</span>
+  <a href="https://github.com/thanhtantran" target="_blank" rel="noopener">Tony Trần</a>
+  <span class="footer-sep">·</span>
+  <span>Copyright 2026 ©</span>
+  <span class="footer-sep">·</span>
+  <a href="https://orangepi.vn" target="_blank" rel="noopener">Orange Pi Việt Nam</a>
+</footer>
+
 </body>
 </html>

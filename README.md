@@ -5,8 +5,7 @@
 ## Cài đặt
 
 ```bash
-git clone https://github.com/localaivn/OPi-ML307A-Minicom
-cd OPi-ML307A-Minicom
+cd sms_app
 
 # Tạo virtualenv (khuyến nghị)
 python3 -m venv venv
@@ -66,7 +65,7 @@ Mở trình duyệt tại: **http://localhost:5000**
 ## Cấu trúc
 
 ```
-OPi-ML307A-Minicom/
+sms_app/
 ├── app.py              # Backend Flask + AT command
 ├── requirements.txt
 ├── README.md
